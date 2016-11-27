@@ -208,7 +208,7 @@ encloseSep left right sp ds0
         []  -> left <> right
         [d] -> left <> d <> right
         ds  -> group $ align $ left'
-                 <> (vcat (zipWith (<>) (mempty : repeat (sp <> space)) ds))
+                 <> vcat (zipWith (<>) (mempty : repeat (sp <> space)) ds)
                  <> right'
           where left'  = left <> flatAlt space mempty
                 right' = flatAlt space mempty <> right
@@ -243,7 +243,7 @@ encloseSep left right sp ds0
 -- (If you want put the commas in front of their elements instead of
 -- at the end, you should use 'tupled' or, in general, 'encloseSep'.)
 punctuate :: Traversable f => ADoc a -> f (ADoc a) -> f (ADoc a)
-punctuate p xs = snd $ mapAccumL (\(d:ds) _ -> (ds, if null ds then d else (d <> p))) (toList xs) xs
+punctuate p xs = snd $ mapAccumL (\(d:ds) _ -> (ds, if null ds then d else d <> p)) (toList xs) xs
 
 -----------------------------------------------------------
 -- high-level combinators
@@ -604,8 +604,8 @@ instance Pretty Rational
 -- @
 fillBreak :: Int -> ADoc a -> ADoc a
 fillBreak f x = width x $ \w ->
-                  if (w > f) then nest f linebreak
-                             else text (spaces (f - w))
+                  if w > f then nest f linebreak
+                           else text (spaces (f - w))
 
 
 -- | The document @(fill i x)@ renders document @x@. It then appends
@@ -632,7 +632,7 @@ fillBreak f x = width x $ \w ->
 -- @
 fill :: Int -> ADoc a -> ADoc a
 fill f d = width d $ \w ->
-                     if (w >= f)
+                     if w >= f
                      then mempty
                      else text (spaces (f - w))
 
@@ -1051,7 +1051,7 @@ simpleDocScanAnn :: (r -> a -> r)
             -> r
             -> SimpleDoc a
             -> SimpleDoc r
-simpleDocScanAnn af r0 = simpleDocMapAnn af SPushAnn SPopAnn r0
+simpleDocScanAnn af = simpleDocMapAnn af SPushAnn SPopAnn
 
 -- | Display a rendered document.
 --
@@ -1143,7 +1143,7 @@ instance Show (ADoc a) where
 -- hello world
 -- @
 putDoc :: ADoc a -> IO ()
-putDoc doc = hPutDoc stdout doc
+putDoc = hPutDoc stdout
 
 -- | @(hPutDoc handle doc)@ pretty prints document @doc@ to the file
 -- handle @handle@ with a page width of 100 characters and a ribbon
