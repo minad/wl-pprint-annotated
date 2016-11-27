@@ -3,9 +3,9 @@
 -- see: https://github.com/sol/hpack
 
 name:          wl-pprint-annotated
-category:      Control, Monads, Text
-version:       0.0.1.0
-synopsis:      Wadler/Leijen pretty printer with annotations
+category:      Text
+version:       0.0.1.1
+synopsis:      Wadler/Leijen pretty printer with annotations and slightly modernized API
 cabal-version: >= 1.10
 license:       BSD3
 license-file:  LICENSE
@@ -16,7 +16,7 @@ stability:     experimental
 homepage:      https://github.com/minad/wl-pprint-annotated#readme
 bug-reports:   https://github.com/minad/wl-pprint-annotated/issues
 copyright:     2011-2012 Edward A. Kmett, 2000 Daan Leijen
-description:   Wadler/Leijen pretty printer with annotations
+description:   Wadler/Leijen pretty printer with annotations and slightly modernized API
 build-type:    Simple
 
 source-repository head
@@ -28,7 +28,7 @@ library
     src
   ghc-options: -Wall
   build-depends:
-    base       == 4.*,
+    base       < 6,
     containers >= 0.4  && < 0.6,
     semigroups >= 0.9  && < 1,
     text       >= 0.11 && < 1.3,
@@ -44,7 +44,7 @@ test-suite wl-pprint
     test
   ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-    base       == 4.*,
+    base       < 6,
     containers >= 0.4  && < 0.6,
     semigroups >= 0.9  && < 1,
     text       >= 0.11 && < 1.3,

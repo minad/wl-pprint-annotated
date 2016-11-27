@@ -7,7 +7,7 @@
 --
 -- License     :  BSD-style (see the file LICENSE)
 --
--- Maintainer  :  ekmett@gmail.com
+-- Maintainer  :  mail@daniel-mendler.de
 -- Stability   :  experimental
 -- Portability :  portable
 --

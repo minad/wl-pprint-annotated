@@ -1,8 +1,8 @@
 name: wl-pprint-annotated
-version: 0.0.1.0
-description: Wadler/Leijen pretty printer with annotations
-synopsis: Wadler/Leijen pretty printer with annotations
-category: Control, Monads, Text
+version: 0.0.1.1
+description: Wadler/Leijen pretty printer with annotations and slightly modernized API
+synopsis: Wadler/Leijen pretty printer with annotations and slightly modernized API
+category: Text
 stability: experimental
 author: Daniel Mendler <mail@daniel-mendler.de>
 maintainer: Daniel Mendler <mail@daniel-mendler.de>
@@ -24,7 +24,7 @@ ghc-options:
 #- -fprint-potential-instances
 
 dependencies:
-- base       == 4.*
+- base       < 6
 - containers >= 0.4  && < 0.6
 - semigroups >= 0.9  && < 1
 - text       >= 0.11 && < 1.3
