@@ -1,6 +1,6 @@
 -----------------------------------------------------------------------------
 -- |
--- Module      :  Text.PrettyPrint.Free.Internal
+-- Module      :  Text.PrettyPrint.Annotated.WL
 -- Copyright   :  Google, Inc. (c) 2013,
 --                Edward Kmett (c) 2011,
 --                Daan Leijen  (c) 2000
@@ -37,7 +37,7 @@
 -- (1997). Additions and the main differences with his original paper
 -- are:
 --
--- * The nil document is called empty.
+-- * The nil document is called mempty.
 --
 -- * The operator '</>' is used
 -- for soft line breaks.
@@ -59,24 +59,27 @@
 -- * The implementation uses optimised representations and strictness
 -- annotations.
 --
--- * A type argument has been added and embedded 'effects' can be seen in
--- the SimpleDoc type.
---
 --
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DefaultSignatures #-}
 
 -----------------------------------------------------------
-module Text.PrettyPrint.Free.Internal (
+module Text.PrettyPrint.Annotated.WL (
   -- * Documents
-    Doc(..), putDoc, hPutDoc
+  Doc, ADoc(..), putDoc, hPutDoc
 
   -- * Basic combinators
   , char, text, nest, line, linebreak, group, softline
   , softbreak, hardline, flatAlt, flatten
 
   -- * Annotations
-  , annotate, sdocAE, sdocScanAnn
+  , annotate, noAnnotate, docMapAnn
+  , simpleDocMapAnn, simpleDocScanAnn
 
   -- * Alignment
   --
@@ -93,7 +96,7 @@ module Text.PrettyPrint.Free.Internal (
   , align, hang, indent, encloseSep, list, tupled, semiBraces
 
   -- * Operators
-  , (<+>), above, (</>), aboveBreak, (<//>)
+  , (<+>), (</>), (<//>), (<#>), (<##>)
 
   -- * List combinators
   , hsep, vsep, fillSep, sep, hcat, vcat, fillCat, cat, punctuate
@@ -113,43 +116,38 @@ module Text.PrettyPrint.Free.Internal (
 
   -- * Rendering
   , SimpleDoc(..), renderPretty, renderCompact, renderSmart
-  , displayS, displayIO, displayDecorated
+  , display, displayS, displayLT, displayIO, displayDecoratedA, displayDecorated
+  , SpanList, displaySpans
 
   -- * Undocumented
 
   , column, nesting, width, columns, ribbon
 
-  , docLeafyRec
-
   -- * Re-exported standard functions
-  , empty, (<>)
+  , mempty, (<>)
   ) where
 
 import Data.String
 import Data.Foldable hiding (fold)
 import Data.Traversable
-import Data.Bifunctor
-import Data.Functor.Apply
-import Data.Functor.Bind
-import Data.Functor.Plus
 import Data.Int
 import Data.Word
-import qualified Data.ByteString.UTF8 as B
-import qualified Data.ByteString.Lazy.UTF8 as BL
+import Data.Void
+import Data.Bifunctor
+import Data.Functor.Identity
 import qualified Data.Text as T
-import qualified Data.Text.Encoding as T
 import qualified Data.Text.Lazy as TL
-import qualified Data.Text.Lazy.Encoding as TL
+import qualified Data.Text.Lazy.Builder as TL
 import Data.List.NonEmpty (NonEmpty)
 import Numeric.Natural (Natural)
 import Control.Applicative
-import Control.Monad
 import Data.Sequence (Seq)
 import Data.Semigroup
 import System.IO (Handle,hPutStr,stdout)
-import Prelude hiding (foldr1)
+import Control.DeepSeq (NFData)
+import GHC.Generics (Generic)
 
-infixr 5 </>,<//>,`above`,`aboveBreak`
+infixr 5 </>, <//>, <#>, <##>
 infixr 6 <+>
 
 -----------------------------------------------------------
@@ -161,24 +159,24 @@ infixr 6 <+>
 -- encloses them in square brackets. The documents are rendered
 -- horizontally if that fits the page. Otherwise they are aligned
 -- vertically. All comma separators are put in front of the elements.
-list :: Foldable f => f (Doc a e) -> Doc a e
+list :: Foldable f => f (ADoc a) -> ADoc a
 list = encloseSep lbracket rbracket comma
 
 -- | The document @(tupled xs)@ comma separates the documents @xs@ and
 -- encloses them in parenthesis. The documents are rendered
 -- horizontally if that fits the page. Otherwise they are aligned
 -- vertically. All comma separators are put in front of the elements.
-tupled :: Foldable f => f (Doc a e) -> Doc a e
+tupled :: Foldable f => f (ADoc a) -> ADoc a
 tupled = encloseSep lparen rparen comma
 
-(<+>) :: Doc a e -> Doc a e -> Doc a e
+(<+>) :: ADoc a -> ADoc a -> ADoc a
 x <+> y = x <> space <> y
 
 -- | The document @(semiBraces xs)@ separates the documents @xs@ with
 -- semi colons and encloses them in braces. The documents are rendered
 -- horizontally if that fits the page. Otherwise they are aligned
 -- vertically. All semi colons are put in front of the elements.
-semiBraces :: Foldable f => f (Doc a e) -> Doc a e
+semiBraces :: Foldable f => f (ADoc a) -> ADoc a
 semiBraces = encloseSep lbrace rbrace semi
 
 -- | The document @(encloseSep l r sep xs)@ concatenates the documents
@@ -204,16 +202,16 @@ semiBraces = encloseSep lbrace rbrace semi
 --      , 200
 --      , 3000 ]
 -- @
-encloseSep :: Foldable f => Doc a e -> Doc a e -> Doc a e -> f (Doc a e) -> Doc a e
+encloseSep :: Foldable f => ADoc a -> ADoc a -> ADoc a -> f (ADoc a) -> ADoc a
 encloseSep left right sp ds0
     = case toList ds0 of
         []  -> left <> right
         [d] -> left <> d <> right
         ds  -> group $ align $ left'
-                 <> (vcat (zipWith (<>) (empty : repeat (sp <> space)) ds))
+                 <> (vcat (zipWith (<>) (mempty : repeat (sp <> space)) ds))
                  <> right'
-          where left'  = left <> flatAlt space empty
-                right' = flatAlt space empty <> right
+          where left'  = left <> flatAlt space mempty
+                right' = flatAlt space mempty <> right
 
 
 -----------------------------------------------------------
@@ -244,7 +242,7 @@ encloseSep left right sp ds0
 --
 -- (If you want put the commas in front of their elements instead of
 -- at the end, you should use 'tupled' or, in general, 'encloseSep'.)
-punctuate :: Traversable f => Doc a e -> f (Doc a e) -> f (Doc a e)
+punctuate :: Traversable f => ADoc a -> f (ADoc a) -> f (ADoc a)
 punctuate p xs = snd $ mapAccumL (\(d:ds) _ -> (ds, if null ds then d else (d <> p))) (toList xs) xs
 
 -----------------------------------------------------------
@@ -254,10 +252,10 @@ punctuate p xs = snd $ mapAccumL (\(d:ds) _ -> (ds, if null ds then d else (d <>
 
 -- | The document @(sep xs)@ concatenates all documents @xs@ either
 -- horizontally with @(\<+\>)@, if it fits the page, or vertically with
--- @above@.
+-- @(\<\#\>)@.
 --
 -- > sep xs  = group (vsep xs)
-sep :: Foldable f => f (Doc a e) -> Doc a e
+sep :: Foldable f => f (ADoc a) -> ADoc a
 sep = group . vsep
 
 -- | The document @(fillSep xs)@ concatenates documents @xs@
@@ -265,17 +263,17 @@ sep = group . vsep
 -- inserts a @line@ and continues doing that for all documents in
 -- @xs@.
 --
--- > fillSep xs  = foldr (</>) empty xs
-fillSep :: Foldable f => f (Doc a e) -> Doc a e
+-- > fillSep xs  = foldr (</>) mempty xs
+fillSep :: Foldable f => f (ADoc a) -> ADoc a
 fillSep = fold (</>)
 
 -- | The document @(hsep xs)@ concatenates all documents @xs@
 -- horizontally with @(\<+\>)@.
-hsep :: Foldable f => f (Doc a e) -> Doc a e
+hsep :: Foldable f => f (ADoc a) -> ADoc a
 hsep = fold (<+>)
 
 -- | The document @(vsep xs)@ concatenates all documents @xs@
--- vertically with @above@. If a 'group' undoes the line breaks
+-- vertically with @(\<\#\>)@. If a 'group' undoes the line breaks
 -- inserted by @vsep@, all documents are separated with a space.
 --
 -- > someText = map text (words ("text to lay out"))
@@ -304,197 +302,214 @@ hsep = fold (<+>)
 --      lay
 --      out
 -- @
-vsep :: Foldable f => f (Doc a e) -> Doc a e
-vsep = fold above
+vsep :: Foldable f => f (ADoc a) -> ADoc a
+vsep = fold (<#>)
 
 -- | The document @(cat xs)@ concatenates all documents @xs@ either
 -- horizontally with @(\<\>)@, if it fits the page, or vertically with
--- @aboveBreak@.
+-- @(\<\#\#\>)@.
 --
 -- > cat xs  = group (vcat xs)
-cat :: Foldable f => f (Doc a e) -> Doc a e
+cat :: Foldable f => f (ADoc a) -> ADoc a
 cat = group . vcat
 
 -- | The document @(fillCat xs)@ concatenates documents @xs@
 -- horizontally with @(\<\>)@ as long as its fits the page, then inserts
 -- a @linebreak@ and continues doing that for all documents in @xs@.
 --
--- > fillCat xs  = foldr (<//>) empty xs
-fillCat :: Foldable f => f (Doc a e) -> Doc a e
+-- > fillCat xs  = foldr (<//>) mempty xs
+fillCat :: Foldable f => f (ADoc a) -> ADoc a
 fillCat = fold (<//>)
 
 -- | The document @(hcat xs)@ concatenates all documents @xs@
 -- horizontally with @(\<\>)@.
-hcat :: Foldable f => f (Doc a e) -> Doc a e
+hcat :: Foldable f => f (ADoc a) -> ADoc a
 hcat = fold (<>)
 
 -- | The document @(vcat xs)@ concatenates all documents @xs@
--- vertically with @aboveBreak@. If a 'group' undoes the line breaks
+-- vertically with @(\<\#\#\>)@. If a 'group' undoes the line breaks
 -- inserted by @vcat@, all documents are directly concatenated.
-vcat :: Foldable f => f (Doc a e) -> Doc a e
-vcat = fold aboveBreak
+vcat :: Foldable f => f (ADoc a) -> ADoc a
+vcat = fold (<##>)
 
-fold :: Foldable f => (Doc a e -> Doc a e -> Doc a e) -> f (Doc a e) -> Doc a e
-fold f xs = case toList xs of
-  [] -> empty
-  _  -> foldr1 f xs
+fold :: Foldable f => (ADoc a -> ADoc a -> ADoc a) -> f (ADoc a) -> ADoc a
+fold f xs | null xs = mempty
+          | otherwise = foldr1 f xs
 
-instance Semigroup (Doc a e) where
+instance Semigroup (ADoc a) where
   -- | The document @(x \<\> y)@ concatenates document @x@ and document
-  -- @y@. It is an associative operation having 'empty' as a left and
+  -- @y@. It is an associative operation having 'mempty' as a left and
   -- right unit.  (infixl 6)
   (<>) = Cat
 
-instance Monoid (Doc a e) where
+instance Monoid (ADoc a) where
   mappend = Cat
-  mempty = empty
+  mempty = Empty
   mconcat = hcat
 
 -- | The document @(x \<\/\> y)@ concatenates document @x@ and @y@ with a
 -- 'softline' in between. This effectively puts @x@ and @y@ either
 -- next to each other (with a @space@ in between) or underneath each
 -- other. (infixr 5)
-(</>) :: Doc a e -> Doc a e -> Doc a e
+(</>) :: ADoc a -> ADoc a -> ADoc a
 x </> y = x <> softline <> y
 
 -- | The document @(x \<\/\/\> y)@ concatenates document @x@ and @y@ with
 -- a 'softbreak' in between. This effectively puts @x@ and @y@ either
 -- right next to each other or underneath each other. (infixr 5)
-(<//>) :: Doc a e -> Doc a e -> Doc a e
-x <//> y        = x <> softbreak <> y
+(<//>) :: ADoc a -> ADoc a -> ADoc a
+x <//> y = x <> softbreak <> y
 
--- | The document @above x y@ concatenates document @x@ and @y@ with a
+-- | The document @(x \<\#\> y)@ concatenates document @x@ and @y@ with a
 -- 'line' in between. (infixr 5)
-above :: Doc a e -> Doc a e -> Doc a e
-above x y         = x <> line <> y
+(<#>) :: ADoc a -> ADoc a -> ADoc a
+x <#> y = x <> line <> y
 
--- | The document @aboveBreak x y@ concatenates document @x@ and @y@ with
+-- | The document @(x \<\#\#\> y)@ concatenates document @x@ and @y@ with
 -- a @linebreak@ in between. (infixr 5)
-aboveBreak :: Doc a e -> Doc a e -> Doc a e
-aboveBreak x y        = x <> linebreak <> y
+(<##>) :: ADoc a -> ADoc a -> ADoc a
+x <##> y = x <> linebreak <> y
 
 -- | The document @softline@ behaves like 'space' if the resulting
 -- output fits the page, otherwise it behaves like 'line'.
 --
 -- > softline = group line
-softline :: Doc a e
+softline :: ADoc a
 softline = group line
 
--- | The document @softbreak@ behaves like 'empty' if the resulting
+-- | The document @softbreak@ behaves like 'mempty' if the resulting
 -- output fits the page, otherwise it behaves like 'line'.
 --
 -- > softbreak  = group linebreak
-softbreak :: Doc a e
+softbreak :: ADoc a
 softbreak = group linebreak
 
 -- | Document @(squotes x)@ encloses document @x@ with single quotes
 -- \"'\".
-squotes :: Doc a e -> Doc a e
+squotes :: ADoc a -> ADoc a
 squotes = enclose squote squote
 
 -- | Document @(dquotes x)@ encloses document @x@ with double quotes
 -- '\"'.
-dquotes :: Doc a e -> Doc a e
+dquotes :: ADoc a -> ADoc a
 dquotes = enclose dquote dquote
 
 -- | Document @(braces x)@ encloses document @x@ in braces, \"{\" and
 -- \"}\".
-braces :: Doc a e -> Doc a e
+braces :: ADoc a -> ADoc a
 braces = enclose lbrace rbrace
 
 -- | Document @(parens x)@ encloses document @x@ in parenthesis, \"(\"
 -- and \")\".
-parens :: Doc a e -> Doc a e
+parens :: ADoc a -> ADoc a
 parens = enclose lparen rparen
 
 -- | Document @(angles x)@ encloses document @x@ in angles, \"\<\" and
 -- \"\>\".
-angles :: Doc a e -> Doc a e
+angles :: ADoc a -> ADoc a
 angles = enclose langle rangle
 
 -- | Document @(brackets x)@ encloses document @x@ in square brackets,
 -- \"[\" and \"]\".
-brackets :: Doc a e -> Doc a e
+brackets :: ADoc a -> ADoc a
 brackets = enclose lbracket rbracket
 
 -- | The document @(enclose l r x)@ encloses document @x@ between
 -- documents @l@ and @r@ using @(\<\>)@.
 --
 -- > enclose l r x   = l <> x <> r
-enclose :: Doc a e -> Doc a e -> Doc a e -> Doc a e
+enclose :: ADoc a -> ADoc a -> ADoc a -> ADoc a
 enclose l r x = l <> x <> r
 
 -- | The document @lparen@ contains a left parenthesis, \"(\".
-lparen :: Doc a e
+lparen :: ADoc a
 lparen = char '('
 
 -- | The document @rparen@ contains a right parenthesis, \")\".
-rparen :: Doc a e
+rparen :: ADoc a
 rparen = char ')'
 
 -- | The document @langle@ contains a left angle, \"\<\".
-langle :: Doc a e
+langle :: ADoc a
 langle = char '<'
 
 -- | The document @rangle@ contains a right angle, \">\".
-rangle :: Doc a e
+rangle :: ADoc a
 rangle = char '>'
 
 -- | The document @lbrace@ contains a left brace, \"{\".
-lbrace :: Doc a e
+lbrace :: ADoc a
 lbrace = char '{'
 
 -- | The document @rbrace@ contains a right brace, \"}\".
-rbrace :: Doc a e
+rbrace :: ADoc a
 rbrace = char '}'
 
 -- | The document @lbracket@ contains a left square bracket, \"[\".
-lbracket :: Doc a e
+lbracket :: ADoc a
 lbracket = char '['
 
 -- | The document @rbracket@ contains a right square bracket, \"]\".
-rbracket :: Doc a e
+rbracket :: ADoc a
 rbracket = char ']'
 
 -- | The document @squote@ contains a single quote, \"'\".
-squote :: Doc a e
+squote :: ADoc a
 squote = char '\''
 
 -- | The document @dquote@ contains a double quote, '\"'.
-dquote :: Doc a e
+dquote :: ADoc a
 dquote = char '"'
 
 -- | The document @semi@ contains a semi colon, \";\".
-semi :: Doc a e
+semi :: ADoc a
 semi = char ';'
 
 -- | The document @colon@ contains a colon, \":\".
-colon :: Doc a e
+colon :: ADoc a
 colon = char ':'
 
 -- | The document @comma@ contains a comma, \",\".
-comma :: Doc a e
+comma :: ADoc a
 comma = char ','
 
 -- | The document @space@ contains a single space, \" \".
 --
 -- > x <+> y   = x <> space <> y
-space :: Doc a e
+space :: ADoc a
 space = char ' '
 
 -- | The document @dot@ contains a single dot, \".\".
-dot :: Doc a e
+dot :: ADoc a
 dot = char '.'
 
 -- | The document @backslash@ contains a back slash, \"\\\".
-backslash :: Doc a e
+backslash :: ADoc a
 backslash = char '\\'
 
 -- | The document @equals@ contains an equal sign, \"=\".
-equals :: Doc a e
+equals :: ADoc a
 equals = char '='
 
-instance IsString (Doc a e) where
+docMapAnn :: (a -> ADoc a' -> ADoc a') -- ^ Annotate
+          -> ADoc a -> ADoc a'
+docMapAnn an = go
+ where
+  go Empty          = Empty
+  go (Char x)       = Char x
+  go (Text i s)     = Text i s
+  go Line           = Line
+  go (FlatAlt l r)  = FlatAlt (go l) (go r)
+  go (Cat l r)      = Cat (go l) (go r)
+  go (Nest i d)     = Nest i (go d)
+  go (Union l r)    = Union (go l) (go r)
+  go (Annotate a d) = an a (go d)
+  go (Column f)     = Column (go . f)
+  go (Nesting k)    = Nesting (go . k)
+  go (Columns k)    = Columns (go . k)
+  go (Ribbon k)     = Ribbon (go . k)
+
+instance IsString (ADoc a) where
   fromString = pretty
 
 -----------------------------------------------------------
@@ -505,40 +520,33 @@ instance IsString (Doc a e) where
 -- a => Pretty [a]@. In normal circumstances only the @pretty@ function
 -- is used.
 class Pretty a where
-  pretty     :: a   -> Doc an e
-  prettyList :: [a] -> Doc an e
+  pretty     :: a   -> ADoc b
+  prettyList :: [a] -> ADoc b
   prettyList = list . map pretty
+
+  default pretty :: Show a => a -> ADoc b
+  pretty = text . show
+
+instance Pretty (ADoc a) where
+  pretty = noAnnotate
 
 instance Pretty a => Pretty [a] where
   pretty = prettyList
 
-instance Pretty (Doc a' e') where
-  pretty = docLeafyRec (\_ -> Empty) (\_ -> id)
-
-instance Pretty B.ByteString where
-  pretty = pretty . B.toString
-
-instance Pretty BL.ByteString where
-  pretty = pretty . BL.toString
-
 instance Pretty T.Text where
-  pretty = pretty . T.encodeUtf8
+  pretty = pretty . T.unpack
 
 instance Pretty TL.Text where
-  pretty = pretty . TL.encodeUtf8
+  pretty = pretty . TL.unpack
 
 instance Pretty () where
   pretty () = text "()"
 
-instance Pretty Bool where
-  pretty = text . show
-
 instance Pretty Char where
   pretty = char
-  prettyList "" = empty
+  prettyList "" = mempty
   prettyList ('\n':s) = line <> prettyList s
-  prettyList s = case span (/='\n') s of
-             (xs,ys) -> text xs <> prettyList ys
+  prettyList s = let (xs,ys) = span (/='\n') s in text xs <> prettyList ys
 
 instance Pretty a => Pretty (Seq a) where
   pretty = prettyList . toList
@@ -546,60 +554,31 @@ instance Pretty a => Pretty (Seq a) where
 instance Pretty a => Pretty (NonEmpty a) where
   pretty = prettyList . toList
 
-instance Pretty Int where
-  pretty = text . show
+instance (Pretty a, Pretty b) => Pretty (a,b) where
+  pretty (x, y) = tupled [pretty x, pretty y]
 
-instance Pretty Int8 where
-  pretty = text . show
-
-instance Pretty Int16 where
-  pretty = text . show
-
-instance Pretty Int32 where
-  pretty = text . show
-
-instance Pretty Int64 where
-  pretty = text . show
-
-instance Pretty Word where
-  pretty = text . show
-
-instance Pretty Word8 where
-  pretty = text . show
-
-instance Pretty Word16 where
-  pretty = text . show
-
-instance Pretty Word32 where
-  pretty = text . show
-
-instance Pretty Word64 where
-  pretty = text . show
-
-instance Pretty Integer where
-  pretty = text . show
-
-instance Pretty Natural where
-  pretty = text . show
-
-instance Pretty Float where
-  pretty = text . show
-
-instance Pretty Double where
-  pretty = text . show
-
-instance (Pretty a,Pretty b) => Pretty (a,b) where
-  pretty (x,y) = tupled [pretty x, pretty y]
-
-instance (Pretty a,Pretty b,Pretty c) => Pretty (a,b,c) where
-  pretty (x,y,z)= tupled [pretty x, pretty y, pretty z]
+instance (Pretty a, Pretty b, Pretty c) => Pretty (a,b,c) where
+  pretty (x, y, z) = tupled [pretty x, pretty y, pretty z]
 
 instance Pretty a => Pretty (Maybe a) where
-  pretty Nothing = empty
-  pretty (Just x) = pretty x
+  pretty = maybe mempty pretty
 
-instance Pretty Rational where
-  pretty = text . show
+instance Pretty Bool
+instance Pretty Int
+instance Pretty Int8
+instance Pretty Int16
+instance Pretty Int32
+instance Pretty Int64
+instance Pretty Word
+instance Pretty Word8
+instance Pretty Word16
+instance Pretty Word32
+instance Pretty Word64
+instance Pretty Integer
+instance Pretty Natural
+instance Pretty Float
+instance Pretty Double
+instance Pretty Rational
 
 -----------------------------------------------------------
 -- semi primitive: fill and fillBreak
@@ -618,13 +597,13 @@ instance Pretty Rational where
 -- The output will now be:
 --
 -- @
--- let empty  :: Doc a e
---     nest   :: Int -> Doc a e -> Doc a e
+-- let mempty  :: ADoc a
+--     nest   :: Int -> ADoc a -> ADoc a
 --     linebreak
---            :: Doc a e
+--            :: ADoc a
 -- @
-fillBreak :: Int -> Doc a e -> Doc a e
-fillBreak f x   = width x $ \w ->
+fillBreak :: Int -> ADoc a -> ADoc a
+fillBreak f x = width x $ \w ->
                   if (w > f) then nest f linebreak
                              else text (spaces (f - w))
 
@@ -635,9 +614,9 @@ fillBreak f x   = width x $ \w ->
 -- useful in practice to output a list of bindings. The following
 -- example demonstrates this.
 --
--- > types  = [("empty","Doc a e")
--- >          ,("nest","Int -> Doc a e -> Doc a e")
--- >          ,("linebreak","Doc a e")]
+-- > types  = [("mempty","Doc a")
+-- >          ,("nest","Int -> ADoc a -> ADoc a")
+-- >          ,("linebreak","Doc a")]
 -- >
 -- > ptype (name,tp)
 -- >        = fill 6 (text name) <+> text "::" <+> text tp
@@ -647,17 +626,17 @@ fillBreak f x   = width x $ \w ->
 -- Which is layed out as:
 --
 -- @
--- let empty  :: Doc a e
---     nest   :: Int -> Doc a e -> Doc a e
---     linebreak :: Doc a e
+-- let mempty  :: ADoc a
+--     nest   :: Int -> ADoc a -> ADoc a
+--     linebreak :: ADoc a
 -- @
-fill :: Int -> Doc a e -> Doc a e
+fill :: Int -> ADoc a -> ADoc a
 fill f d = width d $ \w ->
                      if (w >= f)
-                     then empty
+                     then mempty
                      else text (spaces (f - w))
 
-width :: Doc a e -> (Int -> Doc a e) -> Doc a e
+width :: ADoc a -> (Int -> ADoc a) -> ADoc a
 width d f = column (\k1 -> d <> column (\k2 -> f (k2 - k1)))
 
 
@@ -678,7 +657,7 @@ width d f = column (\k1 -> d <> column (\k2 -> f (k2 - k1)))
 --     indents these
 --     words !
 -- @
-indent :: Int -> Doc a e -> Doc a e
+indent :: Int -> ADoc a -> ADoc a
 indent i d = hang i (text (spaces i) <> d)
 
 -- | The hang combinator implements hanging indentation. The document
@@ -700,7 +679,7 @@ indent i d = hang i (text (spaces i) <> d)
 -- The @hang@ combinator is implemented as:
 --
 -- > hang i x  = align (nest i x)
-hang :: Int -> Doc a e -> Doc a e
+hang :: Int -> ADoc a -> ADoc a
 hang i d = align (nest i d)
 
 -- | The document @(align x)@ renders document @x@ with the nesting
@@ -710,9 +689,9 @@ hang i d = align (nest i d)
 -- As an example, we will put a document right above another one,
 -- regardless of the current nesting level:
 --
--- > x $$ y  = align (above x y)
+-- > x $$ y = align (x <#> y)
 --
--- > test    = text "hi" <+> (text "nice" $$ text "world")
+-- > test = text "hi" <+> (text "nice" $$ text "world")
 --
 -- which will be layed out as:
 --
@@ -720,7 +699,7 @@ hang i d = align (nest i d)
 -- hi nice
 --    world
 -- @
-align :: Doc a e -> Doc a e
+align :: ADoc a -> ADoc a
 align d = column $ \k ->
          nesting $ \i -> nest (k - i) d   --nesting might be negative :-)
 
@@ -728,13 +707,15 @@ align d = column $ \k ->
 -- Primitives
 -----------------------------------------------------------
 
+type Doc = ADoc Void
+
 -- | The abstract data type @Doc@ represents pretty documents.
 --
 -- @Doc@ is an instance of the 'Show' class. @(show doc)@ pretty
 -- prints document @doc@ with a page width of 100 characters and a
 -- ribbon width of 40 characters.
 --
--- > show (text "hello" `above` text "world")
+-- > show (text "hello" <#> text "world")
 --
 -- Which would return the string \"hello\\nworld\", i.e.
 --
@@ -742,84 +723,29 @@ align d = column $ \k ->
 -- hello
 -- world
 -- @
-data Doc a e
-  = Fail
-  | Empty
+data ADoc a
+  = Empty
   | Char {-# UNPACK #-} !Char       -- invariant: char is not '\n'
   | Text {-# UNPACK #-} !Int String -- invariant: text doesn't contain '\n'
   | Line
-  | FlatAlt (Doc a e) (Doc a e)         -- Render the first doc, but when flattened, render the second.
-  | Cat (Doc a e) (Doc a e)
-  | Nest {-# UNPACK #-} !Int (Doc a e)
-  | Union (Doc a e) (Doc a e) -- invariant: first lines of first doc longer than the first lines of the second doc
-  | Effect e
-  | Annotate a (Doc a e)
-  | Column  (Int -> Doc a e)
-  | Nesting (Int -> Doc a e)
-  | Columns (Maybe Int -> Doc a e)
-  | Ribbon  (Maybe Int -> Doc a e)
+  | FlatAlt (ADoc a) (ADoc a)         -- Render the first doc, but when flattened, render the second.
+  | Cat (ADoc a) (ADoc a)
+  | Nest {-# UNPACK #-} !Int (ADoc a)
+  | Union (ADoc a) (ADoc a) -- invariant: first lines of first doc longer than the first lines of the second doc
+  | Annotate a (ADoc a)
+  | Column  (Int -> ADoc a)
+  | Nesting (Int -> ADoc a)
+  | Columns (Maybe Int -> ADoc a)
+  | Ribbon  (Maybe Int -> ADoc a)
+  deriving (Generic, Functor)
 
-docLeafyRec :: (e -> Doc a' e')                -- ^ Effect
-            -> (a -> Doc a' e' -> Doc a' e')   -- ^ Annotate
-            -> Doc a e -> Doc a' e'
-docLeafyRec ef an = go
- where
-  go Fail           = Fail
-  go Empty          = Empty
-  go (Char x)       = Char x
-  go (Text i s)     = Text i s
-  go Line           = Line
-  go (FlatAlt l r)  = FlatAlt (go l) (go r)
-  go (Cat l r)      = Cat (go l) (go r)
-  go (Nest i d)     = Nest i (go d)
-  go (Union l r)    = Union (go l) (go r)
-  go (Effect x)     = ef x
-  go (Annotate a d) = an a (go d)
-  go (Column f)     = Column (go . f)
-  go (Nesting k)    = Nesting (go . k)
-  go (Columns k)    = Columns (go . k)
-  go (Ribbon k)     = Ribbon (go . k)
+instance NFData a => NFData (ADoc a)
 
-instance Functor (Doc a) where
-  fmap f = docLeafyRec (Effect . f) Annotate
-
-instance Bifunctor Doc where
-  bimap f g = docLeafyRec (Effect . g) (Annotate . f)
-
-instance Apply (Doc a) where
-  (<.>) = ap
-
-instance Applicative (Doc a) where
-  pure = Effect
-  (<*>) = ap
-
-annotate :: a -> Doc a e -> Doc a e
+annotate :: a -> ADoc a -> ADoc a
 annotate = Annotate
 
-instance Bind (Doc a) where
-  (>>-) = (>>=)
-
-instance Monad (Doc a) where
-  return = pure
-  d >>= k = docLeafyRec (\e -> k e) Annotate d
-  fail _ = empty
-
-instance Alt (Doc a) where
-  (<!>) = (<>)
-
-instance Plus (Doc a) where
-  zero = empty
-
-instance Alternative (Doc a) where
-  (<|>) = (<>)
-  -- | The empty document is, indeed, empty. Although @empty@ has no
-  -- content, it does have a \'height\' of 1 and behaves exactly like
-  -- @(text \"\")@ (and is therefore not a unit of @above@).
-  empty = Empty
-
-instance MonadPlus (Doc a) where
-  mplus = (<>)
-  mzero = empty
+noAnnotate :: ADoc a -> ADoc a'
+noAnnotate = docMapAnn (const id)
 
 -- | The data type @SimpleDoc@ represents rendered documents and is
 -- used by the display functions.
@@ -829,83 +755,54 @@ instance MonadPlus (Doc a) where
 -- provides two default display functions 'displayS' and
 -- 'displayIO'. You can provide your own display function by writing a
 -- function from a @SimpleDoc@ to your own output format.
-data SimpleDoc a e
-  = SFail
-  | SEmpty
-  | SChar {-# UNPACK #-} !Char (SimpleDoc a e)
-  | SText {-# UNPACK #-} !Int String (SimpleDoc a e)
-  | SLine {-# UNPACK #-} !Int (SimpleDoc a e)
-  | SEffect e (SimpleDoc a e)
-  | SPushAnn a (SimpleDoc a e)
-  | SPopAnn  a (SimpleDoc a e)
+data SimpleDoc a
+  = SEmpty
+  | SChar {-# UNPACK #-} !Char (SimpleDoc a)
+  | SText {-# UNPACK #-} !Int String (SimpleDoc a)
+  | SLine {-# UNPACK #-} !Int (SimpleDoc a)
+  | SPushAnn a (SimpleDoc a)
+  | SPopAnn  a (SimpleDoc a)
+  deriving (Generic, Functor, Foldable, Traversable)
 
-instance Functor (SimpleDoc a) where
-  fmap _ SFail = SFail
-  fmap _ SEmpty = SEmpty
-  fmap f (SChar c d) = SChar c (fmap f d)
-  fmap f (SText i s d) = SText i s (fmap f d)
-  fmap f (SLine i d) = SLine i (fmap f d)
-  fmap f (SEffect e d) = SEffect (f e) (fmap f d)
-  fmap f (SPushAnn a d) = SPushAnn a (fmap f d)
-  fmap f (SPopAnn  a d) = SPopAnn  a (fmap f d)
-
-instance Foldable (SimpleDoc a) where
-  foldMap _ SFail = mempty
-  foldMap _ SEmpty = mempty
-  foldMap f (SChar _ d) = foldMap f d
-  foldMap f (SText _ _ d) = foldMap f d
-  foldMap f (SLine _ d) = foldMap f d
-  foldMap f (SEffect e d) = f e `mappend` foldMap f d
-  foldMap f (SPushAnn _ d) = foldMap f d
-  foldMap f (SPopAnn  _ d) = foldMap f d
-
-instance Traversable (SimpleDoc a) where
-  traverse _ SFail = pure SFail
-  traverse _ SEmpty = pure SEmpty
-  traverse f (SChar c d) = SChar c <$> traverse f d
-  traverse f (SText i s d) = SText i s <$> traverse f d
-  traverse f (SLine i d) = SLine i <$> traverse f d
-  traverse f (SEffect e d) = SEffect <$> f e <*> traverse f d
-  traverse f (SPushAnn a d) = SPushAnn a <$> traverse f d
-  traverse f (SPopAnn  a d) = SPopAnn  a <$> traverse f d
+instance NFData a => NFData (SimpleDoc a)
 
 -- | The document @(char c)@ contains the literal character @c@. The
 -- character shouldn't be a newline (@'\n'@), the function 'line'
 -- should be used for line breaks.
-char :: Char -> Doc a e
+char :: Char -> ADoc a
 char '\n' = line
 char c = Char c
 
 -- | The document @(text s)@ contains the literal string @s@. The
 -- string shouldn't contain any newline (@'\n'@) characters. If the
--- string contains newline characters, the function 'string' should be
+-- string contains newline characters, the function 'pretty' should be
 -- used.
-text :: String -> Doc a e
+text :: String -> ADoc a
 text "" = Empty
 text s  = Text (length s) s
 
 -- | The @line@ document advances to the next line and indents to the
 -- current nesting level. Document @line@ behaves like @(text \" \")@
 -- if the line break is undone by 'group'.
-line :: Doc a e
+line :: ADoc a
 line = FlatAlt Line space
 
 -- | The @linebreak@ document advances to the next line and indents to
 -- the current nesting level. Document @linebreak@ behaves like
--- 'empty' if the line break is undone by 'group'.
-linebreak :: Doc a e
-linebreak = FlatAlt Line empty
+-- 'mempty' if the line break is undone by 'group'.
+linebreak :: ADoc a
+linebreak = FlatAlt Line mempty
 
 -- | A linebreak that can not be flattened; it is guaranteed to be
 -- rendered as a newline.
-hardline :: Doc a e
+hardline :: ADoc a
 hardline = Line
 
 -- | The document @(nest i x)@ renders document @x@ with the current
 -- indentation level increased by i (See also 'hang', 'align' and
 -- 'indent').
 --
--- > nest 2 (text "hello" `above` text "world") `above` text "!"
+-- > nest 2 (text "hello" <#> text "world") <#> text "!"
 --
 -- outputs as:
 --
@@ -914,17 +811,17 @@ hardline = Line
 --   world
 -- !
 -- @
-nest :: Int -> Doc a e -> Doc a e
+nest :: Int -> ADoc a -> ADoc a
 nest = Nest
 
-column, nesting :: (Int -> Doc a e) -> Doc a e
+column, nesting :: (Int -> ADoc a) -> ADoc a
 column = Column
 nesting = Nesting
 
-columns :: (Maybe Int -> Doc a e) -> Doc a e
+columns :: (Maybe Int -> ADoc a) -> ADoc a
 columns = Columns
 
-ribbon :: (Maybe Int -> Doc a e) -> Doc a e
+ribbon :: (Maybe Int -> ADoc a) -> ADoc a
 ribbon = Ribbon
 
 -- | The @group@ combinator is used to specify alternative
@@ -932,20 +829,19 @@ ribbon = Ribbon
 -- document @x@. The resulting line is added to the current line if
 -- that fits the page. Otherwise, the document @x@ is rendered without
 -- any changes.
-group :: Doc a e -> Doc a e
+group :: ADoc a -> ADoc a
 group x = Union (flatten x) x
 
 -- | @flatAlt@ creates a document that changes when flattened; normally
 -- it is rendered as the first argument, but when flattened is rendered
 -- as the second.
-flatAlt :: Doc a e -> Doc a e -> Doc a e
+flatAlt :: ADoc a -> ADoc a -> ADoc a
 flatAlt = FlatAlt
 
-flatten :: Doc a e -> Doc a e
+flatten :: ADoc a -> ADoc a
 flatten (FlatAlt _ y)   = y
 flatten (Cat x y)       = Cat (flatten x) (flatten y)
 flatten (Nest i x)      = Nest i (flatten x)
-flatten  Line           = Fail
 flatten (Union x _)     = flatten x
 flatten (Column f)      = Column (flatten . f)
 flatten (Nesting f)     = Nesting (flatten . f)
@@ -962,8 +858,9 @@ flatten other           = other                     --Empty,Char,Text
 -----------------------------------------------------------
 
 -- list of indentation/document pairs; saves an indirection over [(Int,Doc)]
-data Docs a e = Nil
-          | Cons {-# UNPACK #-} !Int (Doc a e) (Docs a e)
+data Docs a e
+  = Nil
+  | Cons {-# UNPACK #-} !Int (ADoc a) (Docs a e)
 
 -- | This is the default pretty printer which is used by 'show',
 -- 'putDoc' and 'hPutDoc'. @(renderPretty ribbonfrac width x)@ renders
@@ -972,7 +869,7 @@ data Docs a e = Nil
 -- amount of non-indentation characters on a line. The parameter
 -- @ribbonfrac@ should be between @0.0@ and @1.0@. If it is lower or
 -- higher, the ribbon width will be 0 or @width@ respectively.
-renderPretty :: Float -> Int -> Doc a e -> SimpleDoc a e
+renderPretty :: Float -> Int -> ADoc a -> SimpleDoc a
 renderPretty = renderFits nicest1
 
 -- | A slightly smarter rendering algorithm with more lookahead. It provides
@@ -1022,12 +919,12 @@ renderPretty = renderFits nicest1
 -- aaaaaaaaaaa(
 --   [abc, def, ghi])
 -- @
-renderSmart :: Int -> Doc a e -> SimpleDoc a e
+renderSmart :: Int -> ADoc a -> SimpleDoc a
 renderSmart = renderFits nicestR 1.0
 
-renderFits :: (Int -> Int -> Int -> Int -> SimpleDoc a e -> SimpleDoc a e
-               -> SimpleDoc a e)
-              -> Float -> Int -> Doc a e -> SimpleDoc a e
+renderFits :: (Int -> Int -> Int -> Int -> SimpleDoc a -> SimpleDoc a
+               -> SimpleDoc a)
+              -> Float -> Int -> ADoc a -> SimpleDoc a
 renderFits nicest rfrac w x
     = best 0 0 SEmpty (Cons 0 x Nil)
     where
@@ -1040,7 +937,6 @@ renderFits nicest rfrac w x
       best _ _ z Nil            = z
       best n k z (Cons i d ds) =
         case d of
-          Fail          -> SFail
           Empty         -> best n k z ds
           Char c        -> let k' = k+1 in seq k' (SChar c (best n k' z ds))
           Text l s      -> let k' = k+l in seq k' (SText l s (best n k' z ds))
@@ -1048,7 +944,6 @@ renderFits nicest rfrac w x
           FlatAlt l _   -> best n k z (Cons i l ds)
           Cat x' y      -> best n k z (Cons i x' (Cons i y ds))
           Nest j x'     -> let i' = i+j in seq i' (best n k z (Cons i' x' ds))
-          Effect e      -> SEffect e (best n k z ds)
           Annotate a d' -> SPushAnn a (best n k (SPopAnn a $ best n k z ds) (Cons i d' Nil))
           Union p q     -> nicest n k w r (best n k z (Cons i p ds))
                                           (best n k z (Cons i q ds))
@@ -1059,17 +954,15 @@ renderFits nicest rfrac w x
 
 -- @nicest1@ compares the first lines of the two documents.
 -- n = nesting, k = column, p = pagewidth
-nicest1 :: Int -> Int -> Int -> Int -> SimpleDoc a e -> SimpleDoc a e -> SimpleDoc a e
+nicest1 :: Int -> Int -> Int -> Int -> SimpleDoc a -> SimpleDoc a -> SimpleDoc a
 nicest1 n k p r x' y | fits (min n k) wid x' = x'
                      | otherwise = y
   where wid = min (p - k) (r - k + n)
         fits _ w _        | w < 0 = False
-        fits _ _ SFail            = False
         fits _ _ SEmpty           = True
         fits m w (SChar _ x)      = fits m (w - 1) x
         fits m w (SText l _ x)    = fits m (w - l) x
         fits _ _ (SLine _ _)      = True
-        fits m w (SEffect _ x)    = fits m w x
         fits m w (SPushAnn _ x)   = fits m w x
         fits m w (SPopAnn  _ x)   = fits m w x
 
@@ -1077,7 +970,7 @@ nicest1 n k p r x' y | fits (min n k) wid x' = x'
 -- least as deep as the current nesting level. If the initial lines of both
 -- documents fit within the page width, the document that takes fewer lines is
 -- prefered, with preference toward the first.
-nicestR :: Int -> Int -> Int -> Int -> SimpleDoc a e -> SimpleDoc a e -> SimpleDoc a e
+nicestR :: Int -> Int -> Int -> Int -> SimpleDoc a -> SimpleDoc a -> SimpleDoc a
 nicestR n k p r x' y =
   if fits (min n k) wid x' <= fits (min n k) wid y then x' else y
   where wid = min (p - k) (r - k + n)
@@ -1093,13 +986,11 @@ nicestR n k p r x' y =
         -- m = minimum nesting level to fit in
         -- w = the width in which to fit the first line
         fits _ w _           | w < 0     = inf
-        fits _ _ SFail                   = inf
         fits _ _ SEmpty                  = 0
         fits m w (SChar _ x)             = fits m (w - 1) x
         fits m w (SText l _ x)           = fits m (w - l) x
         fits m _ (SLine i x) | m < i     = 1 + fits m (p - i) x
                              | otherwise = 0
-        fits m w (SEffect _ x)           = fits m w x
         fits m w (SPushAnn _ x)          = fits m w x
         fits m w (SPopAnn  _ x)          = fits m w x
 
@@ -1115,18 +1006,16 @@ nicestR n k p r x' y =
 -- renderer is very fast. The resulting output contains fewer
 -- characters than a pretty printed version and can be used for output
 -- that is read by other programs.
-renderCompact :: Doc a e -> SimpleDoc a e
+renderCompact :: ADoc a -> SimpleDoc a
 renderCompact x
     = scan SEmpty 0 [x]
     where
       scan z _ []     = z
       scan z k (d:ds) =
         case d of
-          Fail          -> SFail
           Empty         -> scan z k ds
           Char c        -> let k' = k+1 in seq k' (SChar c (scan z k' ds))
           Text l s      -> let k' = k+l in seq k' (SText l s (scan z k' ds))
-          Effect e      -> SEffect e (scan z k ds)
           Annotate a d' -> SPushAnn a (scan (SPopAnn a $ scan z k ds) k [d'])
           Line          -> SLine 0 (scan z 0 ds)
           FlatAlt y _   -> scan z k (y:ds)
@@ -1143,80 +1032,102 @@ renderCompact x
 -----------------------------------------------------------
 
 
-sdocAE :: (r -> e -> SimpleDoc a' e' -> SimpleDoc a' e') -- ^ SEffect processor
-       -> (r -> a -> r)                                  -- ^ SPushAnn state merge
-       -> (r -> SimpleDoc a' e' -> SimpleDoc a' e')      -- ^ SPushAnn processor
-       -> (r -> SimpleDoc a' e' -> SimpleDoc a' e')      -- ^ SPopAnn processor
-       -> r                                              -- ^ Initial state
-       -> SimpleDoc a e -> SimpleDoc a' e'
-sdocAE ef arf adf apf r0 = go [] r0
+simpleDocMapAnn :: (r -> a -> r)                            -- ^ SPushAnn state merge
+           -> (r -> SimpleDoc a' -> SimpleDoc a')      -- ^ SPushAnn processor
+           -> (r -> SimpleDoc a' -> SimpleDoc a')      -- ^ SPopAnn processor
+           -> r                                        -- ^ Initial state
+           -> SimpleDoc a -> SimpleDoc a'
+simpleDocMapAnn arf adf apf r0 = go [] r0
  where
-  go _      _ SFail          = SFail
   go _      _ SEmpty         = SEmpty
   go rs     r (SChar c x)    = SChar c   (go rs r x)
   go rs     r (SText l s x)  = SText l s (go rs r x)
   go rs     r (SLine i x)    = SLine i   (go rs r x)
-  go rs     r (SEffect e x)  = ef r e (go rs r x)
-  go rs     r (SPushAnn a x) = let r' = arf r a in adf r (go (r:rs) r' x)
+  go rs     r (SPushAnn a x) = let r' = arf r a in adf r' (go (r:rs) r' x)
   go []     _ (SPopAnn _ x)  = apf r0 (go [] r0 x)
   go (r:rs) _ (SPopAnn _ x)  = apf r  (go rs r  x)
 
-sdocScanAnn :: (r -> e -> e')
-            -> (r -> a -> r)
+simpleDocScanAnn :: (r -> a -> r)
             -> r
-            -> SimpleDoc a e
-            -> SimpleDoc r e'
-sdocScanAnn ef af r0 = sdocAE (\r e d -> SEffect (ef r e) d) af SPushAnn SPopAnn r0
+            -> SimpleDoc a
+            -> SimpleDoc r
+simpleDocScanAnn af r0 = simpleDocMapAnn af SPushAnn SPopAnn r0
 
 -- | Display a rendered document.
 --
--- This function takes a means of starting an annotated region, a means of ending it,
+-- This function takes a means of pushing an annotated region, a means of ending it,
 -- and a means of displaying a string, with effects @f@ to display or compute the output @o@.
-displayDecorated :: (Applicative f, Monoid o)
-                 => (a -> f o)        -- ^ How to start an annotated region
-                 -> (a -> f o)        -- ^ How to end an annotated region
-                 -> (e -> f o)        -- ^ How to display a point effect
-                 -> (String -> f o)   -- ^ How to display a string (from document or whitespace)
-                 -> SimpleDoc a e
-                 -> f o
-displayDecorated start stop eff string = go
+displayDecoratedA :: (Applicative f, Monoid o)
+                  => (a -> f o)        -- ^ How to push an annotated region
+                  -> (a -> f o)        -- ^ How to end an annotated region
+                  -> (String -> f o)   -- ^ How to display a string (from document or whitespace)
+                  -> SimpleDoc a
+                  -> f o
+displayDecoratedA push pop str = go
  where
-  go SFail          = error $ "@SFail@ can not appear uncaught in a " ++
-                              "rendered @SimpleDoc@"
   go SEmpty         = pure mempty
-  go (SChar c x)    = string (pure c) <++> go x
-  go (SText _ s x)  = string s <++> go x
-  go (SLine i x)    = string ('\n':indentation i) <++> go x
-  go (SEffect e x)  = eff   e <++> go x
-  go (SPushAnn a x) = start a <++> go x
-  go (SPopAnn  a x) = stop  a <++> go x
-
+  go (SChar c x)    = str (pure c) <++> go x
+  go (SText _ s x)  = str s <++> go x
+  go (SLine i x)    = str ('\n':spaces i) <++> go x
+  go (SPushAnn a x) = push a <++> go x
+  go (SPopAnn  a x) = pop  a <++> go x
   (<++>) = liftA2 mappend
 
+displayDecorated :: Monoid o
+                 => (a -> o)        -- ^ How to push an annotated region
+                 -> (a -> o)        -- ^ How to end an annotated region
+                 -> (String -> o)   -- ^ How to display a string (from document or whitespace)
+                 -> SimpleDoc a
+                 -> o
+displayDecorated push pop str = runIdentity . displayDecoratedA (pure . push) (pure . pop) (pure . str)
+
 -- | @(displayIO handle simpleDoc)@ writes @simpleDoc@ to the file
--- handle @handle@, discarding all effects and annotations. This function
+-- handle @handle@, discarding all annotations. This function
 -- is used for example by 'hPutDoc':
 --
 -- > hPutDoc handle doc  = displayIO handle (renderPretty 0.4 100 doc)
-displayIO :: Handle -> SimpleDoc a e -> IO ()
-displayIO handle = displayDecorated cpu cpu cpu (hPutStr handle)
- where cpu = const (pure ())
+displayIO :: Handle -> SimpleDoc a -> IO ()
+displayIO handle = displayDecoratedA cpu cpu (hPutStr handle)
+ where cpu = const $ pure ()
 
 -- | @(displayS simpleDoc)@ takes the output @simpleDoc@ from a
 -- rendering function and transforms it to a 'ShowS' type (for use in
--- the 'Show' class).  Along the way, all effects and annotations are
+-- the 'Show' class).  Along the way, all annotations are
 -- discarded.
 --
--- > showWidth :: Int -> Doc -> String
+-- > showWidth :: Int -> ADoc -> String
 -- > showWidth w x   = displayS (renderPretty 0.4 w x) ""
-displayS :: SimpleDoc a e -> ShowS
-displayS = displayDecorated ci ci ci showString
+displayS :: SimpleDoc a -> ShowS
+displayS = displayDecoratedA ci ci showString
  where ci = const id
+
+display :: SimpleDoc a -> String
+display = flip displayS ""
+
+displayLT :: SimpleDoc a -> TL.Text
+displayLT = TL.toLazyText . displayDecorated cm cm TL.fromString
+ where cm = const mempty
+
+type SpanList a = [(Int, Int, a)]
+
+-- | Generate a pair of a string and a list of source span/annotation pairs
+displaySpans :: Monoid o => (String -> o) -> SimpleDoc a -> (o, SpanList a)
+displaySpans str = first ($ mempty) . go 0 []
+ where
+  go _ []          SEmpty          = (id, [])
+  go i stk         (SChar c x)     = first (str' $ pure c) $ go (i+1) stk x
+  go i stk         (SText l s x)   = first (str' s) $ go (i + l) stk x
+  go i stk         (SLine ind x)   = first (str' $ '\n':spaces ind) $ go (1+i+ind) stk x
+  go i stk         (SPushAnn _ x)  = go i (i:stk) x
+  go i (start:stk) (SPopAnn ann x) = second ((start, i-start, ann):) $ go i stk x
+  go _ _           SEmpty          = error "Stack not empty"
+  go _ []          (SPopAnn _ _)   = error "Stack underflow"
+  str' s                           = (mappend (str s) .)
 
 -----------------------------------------------------------
 -- default pretty printers: show, putDoc and hPutDoc
 -----------------------------------------------------------
-instance Show (Doc a e) where
+instance Show (ADoc a) where
   showsPrec _ doc = displayS (renderPretty 0.4 80 doc)
 
 -- | The action @(putDoc doc)@ pretty prints document @doc@ to the
@@ -1231,7 +1142,7 @@ instance Show (Doc a e) where
 -- @
 -- hello world
 -- @
-putDoc :: Doc a e -> IO ()
+putDoc :: ADoc a -> IO ()
 putDoc doc = hPutDoc stdout doc
 
 -- | @(hPutDoc handle doc)@ pretty prints document @doc@ to the file
@@ -1243,22 +1154,12 @@ putDoc doc = hPutDoc stdout doc
 -- >                            ["vertical","text"]))
 -- >          ; hClose handle
 -- >          }
-hPutDoc :: Handle -> Doc a e -> IO ()
+hPutDoc :: Handle -> ADoc a -> IO ()
 hPutDoc handle doc = displayIO handle (renderPretty 0.4 100 doc)
 
 -----------------------------------------------------------
 -- insert spaces
--- "indentation" used to insert tabs but tabs seem to cause
--- more trouble than they solve :-)
 -----------------------------------------------------------
 spaces :: Int -> String
 spaces n | n <= 0    = ""
          | otherwise = replicate n ' '
-
-indentation :: Int -> String
-indentation n = spaces n
-
---indentation n   | n >= 8    = '\t' : indentation (n-8)
---                | otherwise = spaces n
-
---  LocalWords:  PPrint combinators Wadler Wadler's encloseSep

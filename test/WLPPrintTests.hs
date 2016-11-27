@@ -3,7 +3,7 @@ module Main where
 import Test.Framework
 import Test.Framework.Providers.HUnit
 import Test.HUnit hiding (Test)
-import Text.PrettyPrint.Free.Internal
+import Text.PrettyPrint.Annotated.WL
 
 main :: IO ()
 main = defaultMain [
@@ -32,20 +32,20 @@ conTests = [
 ------------------------------------------------------------
 -- We test the @Doc@ constructors.
 
-assertPretty :: Int -> String -> String -> Doc a e -> Assertion
+assertPretty :: Int -> String -> String -> ADoc a -> Assertion
 assertPretty w desc str doc = assertEqual (desc ++ " (pretty)") str
                                 $ displayS (renderPretty 1.0 w doc) ""
 
-assertSmart :: Int -> String -> String -> Doc a e -> Assertion
+assertSmart :: Int -> String -> String -> ADoc a -> Assertion
 assertSmart w desc str doc = assertEqual (desc ++ " (smart)") str
                                 $ displayS (renderSmart w doc) ""
 
-assertRender :: Int -> String -> String -> Doc a e -> Assertion
+assertRender :: Int -> String -> String -> ADoc a -> Assertion
 assertRender w desc str doc = do assertPretty w desc str doc
                                  assertSmart w desc str doc
 
 emptyTests :: Assertion
-emptyTests = assertRender 80 "Empty test 1" "" empty
+emptyTests = assertRender 80 "Empty test 1" "" mempty
 
 charTests :: Assertion
 charTests = assertRender 80 "Char test 1" "a" (char 'a')
