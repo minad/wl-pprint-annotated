@@ -65,14 +65,6 @@
 -- annotations.
 --
 --
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE TypeSynonymInstances #-}
-{-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE DeriveFoldable #-}
-{-# LANGUAGE DeriveTraversable #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DefaultSignatures #-}
-
 -----------------------------------------------------------
 module Text.PrettyPrint.Annotated.WL (
   -- * Documents

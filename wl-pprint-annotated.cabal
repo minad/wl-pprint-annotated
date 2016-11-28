@@ -26,6 +26,7 @@ source-repository head
 library
   hs-source-dirs:
     src
+  default-extensions: FlexibleInstances TypeSynonymInstances DeriveFunctor DeriveFoldable DeriveTraversable DeriveGeneric DefaultSignatures
   ghc-options: -Wall
   build-depends:
     base       >= 4.8  && < 5,
@@ -42,6 +43,7 @@ test-suite wl-pprint
   main-is: WLPPrintTests.hs
   hs-source-dirs:
     test
+  default-extensions: FlexibleInstances TypeSynonymInstances DeriveFunctor DeriveFoldable DeriveTraversable DeriveGeneric DefaultSignatures
   ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N
   build-depends:
     base       >= 4.8  && < 5,
