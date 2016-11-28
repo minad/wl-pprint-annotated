@@ -124,7 +124,6 @@ module Text.PrettyPrint.Annotated.WL (
   , mempty, (<>)
   ) where
 
-import Data.String
 import Data.Foldable hiding (fold)
 import Data.Traversable
 import Data.Int
@@ -142,6 +141,7 @@ import Data.Semigroup
 import System.IO (Handle,hPutStr,stdout)
 import Control.DeepSeq (NFData)
 import GHC.Generics (Generic)
+import Data.String (IsString(..))
 
 infixr 5 </>, <//>, <#>, <##>
 infixr 6 <+>
@@ -1027,27 +1027,30 @@ renderCompact x
 -- Displayers:  displayS and displayIO
 -----------------------------------------------------------
 
-
-simpleDocMapAnn :: (r -> a -> r)                            -- ^ SPushAnn state merge
+simpleDocMapAnn :: (r -> a -> r)                            -- ^ SPushAnn state update
+                -> (r -> a -> r)                            -- ^ SPopAnn state update
                 -> (r -> SimpleDoc a' -> SimpleDoc a')      -- ^ SPushAnn processor
                 -> (r -> SimpleDoc a' -> SimpleDoc a')      -- ^ SPopAnn processor
                 -> r                                        -- ^ Initial state
                 -> SimpleDoc a -> SimpleDoc a'
-simpleDocMapAnn arf adf apf r0 = go [] r0
+simpleDocMapAnn upPush upPop push pop = go
  where
-  go _      _ SEmpty         = SEmpty
-  go rs     r (SChar c x)    = SChar c   (go rs r x)
-  go rs     r (SText l s x)  = SText l s (go rs r x)
-  go rs     r (SLine i x)    = SLine i   (go rs r x)
-  go rs     r (SPushAnn a x) = let r' = arf r a in adf r' (go (r:rs) r' x)
-  go []     _ (SPopAnn _ x)  = apf r0 (go [] r0 x)
-  go (r:rs) _ (SPopAnn _ x)  = apf r  (go rs r  x)
+  go _ SEmpty         = SEmpty
+  go r (SChar c x)    = SChar c   (go r x)
+  go r (SText l s x)  = SText l s (go r x)
+  go r (SLine i x)    = SLine i   (go r x)
+  go r (SPushAnn a x) = let r' = upPush r a in push r' $ go r' x
+  go r (SPopAnn  a x) = let r' = upPop  r a in pop  r' $ go r' x
 
-simpleDocScanAnn :: (r -> a -> r)
-                 -> r
+simpleDocScanAnn :: (r -> a -> r) -- ^ SPushAnn state merge
+                 -> r             -- ^ Initial state
                  -> SimpleDoc a
                  -> SimpleDoc r
-simpleDocScanAnn af = simpleDocMapAnn af SPushAnn SPopAnn
+simpleDocScanAnn f r0 = simpleDocMapAnn merge pop (SPushAnn . head) (SPopAnn . head) [r0]
+  where merge rs@(r:_) x = f r x : rs
+        merge []     _ = error "Stack underflow"
+        pop   (_:rs) _ = rs
+        pop   []     _ = error "Stack underflow"
 
 -- | Display a rendered document.
 --
