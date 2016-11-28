@@ -37,7 +37,8 @@
 -- (1997). Additions and the main differences with his original paper
 -- are:
 --
--- * The nil document is called mempty.
+-- * The nil document is called mempty. Not empty as in other
+-- pretty printers for compatibility with base.
 --
 -- * The operator '</>' is used
 -- for soft line breaks.
@@ -47,14 +48,18 @@
 --
 -- * Lots of other useful combinators, like 'fillSep' and 'list'.
 --
--- * There are two renderers, 'renderPretty' for pretty printing and
--- 'renderCompact' for compact output. The pretty printing algorithm
+-- * There are three renderers, 'renderPretty/renderPrettyDefault' and 'renderSmart'
+-- for pretty printing and 'renderCompact' for compact output. The pretty printing algorithm
 -- also uses a ribbon-width now for even prettier output.
 --
--- * There are two display routines, 'displayS' for strings and 'displayIO'
--- for file based output.
+-- * There are display routines 'displayS' and 'display' for strings,
+-- 'displayLT' for lazy text, 'displayIO' for file based output.
+-- Generalized display routines for display with annotations
+-- are provided, i.e., 'displayDecoratedA' and 'displayDecorated'.
+-- Furthermore 'displaySpans' exists which creates a monoid and a SpanList
+-- of the annotations.
 --
--- * There is a 'Pretty' class.
+-- * There is a 'Pretty' class which creates documents without annotations.
 --
 -- * The implementation uses optimised representations and strictness
 -- annotations.
