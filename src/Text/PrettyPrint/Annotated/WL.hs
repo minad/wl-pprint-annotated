@@ -136,8 +136,8 @@ import Data.Void
 import Data.Bifunctor
 import Data.Functor.Identity
 import qualified Data.Text as T
-import qualified Data.Text.Lazy as TL
-import qualified Data.Text.Lazy.Builder as TL
+import qualified Data.Text.Lazy as LT
+import qualified Data.Text.Lazy.Builder as LT
 import Data.List.NonEmpty (NonEmpty)
 import Numeric.Natural (Natural)
 import Control.Applicative
@@ -536,8 +536,8 @@ instance Pretty a => Pretty [a] where
 instance Pretty T.Text where
   pretty = pretty . T.unpack
 
-instance Pretty TL.Text where
-  pretty = pretty . TL.unpack
+instance Pretty LT.Text where
+  pretty = pretty . LT.unpack
 
 instance Pretty () where
   pretty () = text "()"
@@ -1105,8 +1105,8 @@ displayS = displayDecoratedA ci ci showString
 display :: SimpleDoc a -> String
 display = flip displayS ""
 
-displayLT :: SimpleDoc a -> TL.Text
-displayLT = TL.toLazyText . displayDecorated cm cm TL.fromString
+displayLT :: SimpleDoc a -> LT.Text
+displayLT = LT.toLazyText . displayDecorated cm cm LT.fromString
  where cm = const mempty
 
 type SpanList a = [(Int, Int, a)]
