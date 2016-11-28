@@ -487,8 +487,7 @@ backslash = char '\\'
 equals :: Doc a
 equals = char '='
 
-docMapAnn :: (a -> Doc a' -> Doc a') -- ^ Annotate
-          -> Doc a -> Doc a'
+docMapAnn :: (a -> Doc a' -> Doc a') -> Doc a -> Doc a'
 docMapAnn an = go
  where
   go Empty          = Empty
@@ -739,7 +738,7 @@ annotate :: a -> Doc a -> Doc a
 annotate = Annotate
 
 noAnnotate :: Doc a -> Doc a'
-noAnnotate = docMapAnn (const id)
+noAnnotate = docMapAnn $ const id
 
 -- | The data type @SimpleDoc@ represents rendered documents and is
 -- used by the display functions.
