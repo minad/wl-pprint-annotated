@@ -91,7 +91,7 @@ columnsTests = do assertRender 21 "Columns test 1" "foo 21"
                     $ text "foo" <+> (nest 2 $ columns $ \w -> pretty w)
 
 ribbonTests :: Assertion
-ribbonTests = do assertEqual "Ribbon test 1" "foo 32"
+ribbonTests = do assertEqual "Ribbon test 1" "foo 40"
                    $ show (text "foo" <+> (ribbon $ \r -> pretty r))
 
 ------------------------------------------------------------

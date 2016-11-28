@@ -115,7 +115,7 @@ module Text.PrettyPrint.Annotated.WL (
   , Pretty(..)
 
   -- * Rendering
-  , SimpleDoc(..), renderPretty, renderCompact, renderSmart
+  , SimpleDoc(..), renderPrettyDefault, renderPretty, renderCompact, renderSmart
   , display, displayS, displayLT, displayIO, displayDecoratedA, displayDecorated
   , SpanList, displaySpans
 
@@ -872,6 +872,9 @@ data Docs a e
 renderPretty :: Float -> Int -> ADoc a -> SimpleDoc a
 renderPretty = renderFits nicest1
 
+renderPrettyDefault :: ADoc a -> SimpleDoc a
+renderPrettyDefault = renderPretty 0.4 100
+
 -- | A slightly smarter rendering algorithm with more lookahead. It provides
 -- provide earlier breaking on deeply nested structures.
 -- For example, consider this python-ish pseudocode:
@@ -1033,10 +1036,10 @@ renderCompact x
 
 
 simpleDocMapAnn :: (r -> a -> r)                            -- ^ SPushAnn state merge
-           -> (r -> SimpleDoc a' -> SimpleDoc a')      -- ^ SPushAnn processor
-           -> (r -> SimpleDoc a' -> SimpleDoc a')      -- ^ SPopAnn processor
-           -> r                                        -- ^ Initial state
-           -> SimpleDoc a -> SimpleDoc a'
+                -> (r -> SimpleDoc a' -> SimpleDoc a')      -- ^ SPushAnn processor
+                -> (r -> SimpleDoc a' -> SimpleDoc a')      -- ^ SPopAnn processor
+                -> r                                        -- ^ Initial state
+                -> SimpleDoc a -> SimpleDoc a'
 simpleDocMapAnn arf adf apf r0 = go [] r0
  where
   go _      _ SEmpty         = SEmpty
@@ -1048,9 +1051,9 @@ simpleDocMapAnn arf adf apf r0 = go [] r0
   go (r:rs) _ (SPopAnn _ x)  = apf r  (go rs r  x)
 
 simpleDocScanAnn :: (r -> a -> r)
-            -> r
-            -> SimpleDoc a
-            -> SimpleDoc r
+                 -> r
+                 -> SimpleDoc a
+                 -> SimpleDoc r
 simpleDocScanAnn af = simpleDocMapAnn af SPushAnn SPopAnn
 
 -- | Display a rendered document.
@@ -1079,24 +1082,22 @@ displayDecorated :: Monoid o
                  -> (String -> o)   -- ^ How to display a string (from document or whitespace)
                  -> SimpleDoc a
                  -> o
-displayDecorated push pop str = runIdentity . displayDecoratedA (pure . push) (pure . pop) (pure . str)
+displayDecorated push pop str = runIdentity .
+  displayDecoratedA (pure . push) (pure . pop) (pure . str)
 
 -- | @(displayIO handle simpleDoc)@ writes @simpleDoc@ to the file
 -- handle @handle@, discarding all annotations. This function
 -- is used for example by 'hPutDoc':
 --
--- > hPutDoc handle doc  = displayIO handle (renderPretty 0.4 100 doc)
+-- > hPutDoc handle doc = displayIO handle (renderPrettyDefault doc)
 displayIO :: Handle -> SimpleDoc a -> IO ()
 displayIO handle = displayDecoratedA cpu cpu (hPutStr handle)
  where cpu = const $ pure ()
 
 -- | @(displayS simpleDoc)@ takes the output @simpleDoc@ from a
 -- rendering function and transforms it to a 'ShowS' type (for use in
--- the 'Show' class).  Along the way, all annotations are
+-- the 'Show' class). Along the way, all annotations are
 -- discarded.
---
--- > showWidth :: Int -> ADoc -> String
--- > showWidth w x   = displayS (renderPretty 0.4 w x) ""
 displayS :: SimpleDoc a -> ShowS
 displayS = displayDecoratedA ci ci showString
  where ci = const id
@@ -1128,7 +1129,7 @@ displaySpans str = first ($ mempty) . go 0 []
 -- default pretty printers: show, putDoc and hPutDoc
 -----------------------------------------------------------
 instance Show (ADoc a) where
-  showsPrec _ doc = displayS (renderPretty 0.4 80 doc)
+  showsPrec _ = displayS . renderPrettyDefault
 
 -- | The action @(putDoc doc)@ pretty prints document @doc@ to the
 -- standard output, with a page width of 100 characters and a ribbon
@@ -1155,7 +1156,7 @@ putDoc = hPutDoc stdout
 -- >          ; hClose handle
 -- >          }
 hPutDoc :: Handle -> ADoc a -> IO ()
-hPutDoc handle doc = displayIO handle (renderPretty 0.4 100 doc)
+hPutDoc handle = displayIO handle . renderPrettyDefault
 
 -----------------------------------------------------------
 -- insert spaces
