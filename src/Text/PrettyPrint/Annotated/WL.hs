@@ -37,8 +37,8 @@
 -- (1997). Additions and the main differences with his original paper
 -- are:
 --
--- * The nil document is called mempty. Not empty as in other
--- pretty printers for compatibility with base.
+-- * The nil document is called 'mempty'. We cannot use 'empty'
+-- for compatibility with base.
 --
 -- * The operator '</>' is used
 -- for soft line breaks.
