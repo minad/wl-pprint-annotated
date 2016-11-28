@@ -1113,17 +1113,16 @@ type SpanList a = [(Int, Int, a)]
 
 -- | Generate a pair of a string and a list of source span/annotation pairs
 displaySpans :: Monoid o => (String -> o) -> SimpleDoc a -> (o, SpanList a)
-displaySpans str = first ($ mempty) . go 0 []
+displaySpans str = go 0 []
  where
-  go _ []          SEmpty          = (id, [])
-  go i stk         (SChar c x)     = first (str' $ pure c) $ go (i+1) stk x
-  go i stk         (SText l s x)   = first (str' s) $ go (i + l) stk x
-  go i stk         (SLine ind x)   = first (str' $ '\n':spaces ind) $ go (1+i+ind) stk x
+  go _ []          SEmpty          = (mempty, [])
+  go i stk         (SChar c x)     = first (mappend $ str $ pure c) $ go (i+1) stk x
+  go i stk         (SText l s x)   = first (mappend $ str s) $ go (i + l) stk x
+  go i stk         (SLine ind x)   = first (mappend $ str $ '\n':spaces ind) $ go (1+i+ind) stk x
   go i stk         (SPushAnn _ x)  = go i (i:stk) x
   go i (start:stk) (SPopAnn ann x) = second ((start, i-start, ann):) $ go i stk x
   go _ _           SEmpty          = error "Stack not empty"
   go _ []          (SPopAnn _ _)   = error "Stack underflow"
-  str' s                           = (mappend (str s) .)
 
 -----------------------------------------------------------
 -- default pretty printers: show, putDoc and hPutDoc
