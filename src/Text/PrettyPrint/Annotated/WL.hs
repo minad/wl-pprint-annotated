@@ -873,7 +873,7 @@ renderPretty = renderFits nicest1
 -- | This is the default pretty printer which is used by 'show',
 -- 'putDoc' and 'hPutDoc'. This routine uses a page width of 100 characters
 -- and a ribbon width of 40 characters.
-rerenderPrettyDefault :: Doc a -> SimpleDoc a
+renderPrettyDefault :: Doc a -> SimpleDoc a
 renderPrettyDefault = renderPretty 0.4 100
 
 -- | A slightly smarter rendering algorithm with more lookahead. It provides
