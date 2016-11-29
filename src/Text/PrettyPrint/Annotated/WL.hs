@@ -53,7 +53,7 @@
 -- also uses a ribbon-width now for even prettier output.
 --
 -- * There are display routines 'displayS' and 'display' for strings,
--- 'displayLT' for lazy text, 'displayIO' for file based output.
+-- 'displayT' for lazy text, 'displayIO' for file based output.
 -- Generalized display routines for display with annotations
 -- are provided, i.e., 'displayDecoratedA' and 'displayDecorated'.
 -- Furthermore 'displaySpans' exists which creates a monoid and a SpanList
@@ -113,7 +113,7 @@ module Text.PrettyPrint.Annotated.WL (
 
   -- * Rendering
   , SimpleDoc(..), renderPrettyDefault, renderPretty, renderCompact, renderSmart
-  , display, displayS, displayLT, displayIO, displayDecoratedA, displayDecorated
+  , display, displayS, displayT, displayIO, displayDecoratedA, displayDecorated
   , SpanList, displaySpans
 
   -- * Undocumented
@@ -131,8 +131,8 @@ import Data.Word
 import Data.Bifunctor
 import Data.Functor.Identity
 import qualified Data.Text as T
-import qualified Data.Text.Lazy as LT
-import qualified Data.Text.Lazy.Builder as LT
+import qualified Data.Text.Lazy as TL
+import qualified Data.Text.Lazy.Builder as TL
 import Data.List.NonEmpty (NonEmpty)
 import Numeric.Natural (Natural)
 import Control.Applicative
@@ -531,8 +531,8 @@ instance Pretty a => Pretty [a] where
 instance Pretty T.Text where
   pretty = pretty . T.unpack
 
-instance Pretty LT.Text where
-  pretty = pretty . LT.unpack
+instance Pretty TL.Text where
+  pretty = pretty . TL.unpack
 
 instance Pretty () where
   pretty () = text "()"
@@ -1101,8 +1101,8 @@ displayS = displayDecoratedA ci ci showString
 display :: SimpleDoc a -> String
 display = flip displayS ""
 
-displayLT :: SimpleDoc a -> LT.Text
-displayLT = LT.toLazyText . displayDecorated cm cm LT.fromString
+displayT :: SimpleDoc a -> TL.Text
+displayT = TL.toLazyText . displayDecorated cm cm TL.fromString
  where cm = const mempty
 
 type SpanList a = [(Int, Int, a)]
