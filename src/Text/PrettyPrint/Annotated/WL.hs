@@ -64,6 +64,9 @@
 -- * The implementation uses optimised representations and strictness
 -- annotations.
 --
+-- * There is the wl-pprint-console package, based on this package,
+-- which provides additional display routines, e.g., colorful output using
+-- ANSI escape sequences.
 --
 -----------------------------------------------------------
 module Text.PrettyPrint.Annotated.WL (
@@ -702,7 +705,7 @@ align d = column $ \k ->
 -- Primitives
 -----------------------------------------------------------
 
--- | The abstract data type @Doc@ represents pretty documents.
+-- | The data type @Doc@ represents pretty documents.
 --
 -- @Doc@ is an instance of the 'Show' class. @(show doc)@ pretty
 -- prints document @doc@ with a page width of 100 characters and a
@@ -734,9 +737,11 @@ data Doc a
 
 instance NFData a => NFData (Doc a)
 
+-- | Annotate a document.
 annotate :: a -> Doc a -> Doc a
 annotate = Annotate
 
+-- | Remove the annotations from a document.
 noAnnotate :: Doc a -> Doc a'
 noAnnotate = docMapAnn $ const id
 
@@ -865,7 +870,10 @@ data Docs a e
 renderPretty :: Float -> Int -> Doc a -> SimpleDoc a
 renderPretty = renderFits nicest1
 
-renderPrettyDefault :: Doc a -> SimpleDoc a
+-- | This is the default pretty printer which is used by 'show',
+-- 'putDoc' and 'hPutDoc'. This routine uses a page width of 100 characters
+-- and a ribbon width of 40 characters.
+rerenderPrettyDefault :: Doc a -> SimpleDoc a
 renderPrettyDefault = renderPretty 0.4 100
 
 -- | A slightly smarter rendering algorithm with more lookahead. It provides
@@ -1072,6 +1080,10 @@ displayDecoratedA push pop str = go
   go (SPopAnn  a x) = pop  a <++> go x
   (<++>) = liftA2 mappend
 
+-- | Display a rendered document.
+--
+-- This function takes a means of pushing an annotated region, a means of ending it,
+-- and a means of displaying a string to compute the output @o@.
 displayDecorated :: Monoid o
                  => (a -> o)        -- ^ How to push an annotated region
                  -> (a -> o)        -- ^ How to end an annotated region
@@ -1098,13 +1110,23 @@ displayS :: SimpleDoc a -> ShowS
 displayS = displayDecoratedA ci ci (++)
  where ci = const id
 
+-- | @(display simpleDoc)@ takes the output @simpleDoc@ from a
+-- rendering function and outputs a 'String'. Along the way, all annotations are
+-- discarded.
 display :: SimpleDoc a -> String
 display = flip displayS ""
 
+-- | @(display simpleDoc)@ takes the output @simpleDoc@ from a
+-- rendering function and outputs a 'Text'. Along the way, all annotations are
+-- discarded.
 displayT :: SimpleDoc a -> TL.Text
 displayT = TL.toLazyText . displayDecorated cm cm TL.fromString
  where cm = const mempty
 
+-- | The type alias @SpanList@ is used by @displaySpan@
+--
+-- First element is the starting position, second the length
+-- and third the annotation at the given range.
 type SpanList a = [(Int, Int, a)]
 
 -- | Generate a pair of a string and a list of source span/annotation pairs
