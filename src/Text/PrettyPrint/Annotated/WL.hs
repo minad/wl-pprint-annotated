@@ -1095,7 +1095,7 @@ displayIO handle = displayDecoratedA cpu cpu (hPutStr handle)
 -- the 'Show' class). Along the way, all annotations are
 -- discarded.
 displayS :: SimpleDoc a -> ShowS
-displayS = displayDecoratedA ci ci showString
+displayS = displayDecoratedA ci ci (++)
  where ci = const id
 
 display :: SimpleDoc a -> String
