@@ -9,7 +9,7 @@ synopsis:      Wadler/Leijen pretty printer with annotations and slightly modern
 cabal-version: >= 1.10
 license:       BSD3
 license-file:  LICENSE
-tested-with:   GHC == 7.10.3, GHC == 8.0.1
+tested-with:   GHC == 7.4.2, GHC == 7.6.3, GHC == 7.8.4, GHC == 7.10.3, GHC == 8.0.1
 author:        Daniel Mendler <mail@daniel-mendler.de>
 maintainer:    Daniel Mendler <mail@daniel-mendler.de>
 stability:     experimental
