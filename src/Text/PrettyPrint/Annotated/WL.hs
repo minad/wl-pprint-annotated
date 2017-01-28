@@ -1079,6 +1079,8 @@ displayDecoratedA push pop str = go
   go (SPushAnn a x) = push a <++> go x
   go (SPopAnn  a x) = pop  a <++> go x
   (<++>) = liftA2 mappend
+{-# SPECIALIZE displayDecoratedA :: Monoid o => (a -> Identity o) -> (a -> Identity o) -> (String -> Identity o) -> SimpleDoc a -> Identity o #-}
+{-# SPECIALIZE displayDecoratedA :: Monoid o => (a -> (o -> o)) -> (a -> (o -> o)) -> (String -> (o -> o)) -> SimpleDoc a -> (o -> o) #-}
 
 -- | Display a rendered document.
 --
