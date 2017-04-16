@@ -1,19 +1,18 @@
 module Main where
 
-import Test.Framework
-import Test.Framework.Providers.HUnit
-import Test.HUnit hiding (Test)
+import Test.Tasty
+import Test.Tasty.HUnit
 import Text.PrettyPrint.Annotated.WL
 
 main :: IO ()
-main = defaultMain [
+main = defaultMain $ testGroup "Tests" [
          testGroup "Tests for each data constructor" conTests
        , testGroup "Tests for some combinators" codeTests
        , testGroup "Tests for the formatting algorithms" formatTests
        , testGroup "Tests for the code examples in the documentation" docTests
        ]
 
-conTests :: [Test]
+conTests :: [TestTree]
 conTests = [
     testCase "Empty tests"   emptyTests
   , testCase "Char tests"    charTests
@@ -122,7 +121,7 @@ ribbonTests = assertEqual "Ribbon test 1" "foo 40"
 ------------------------------------------------------------
 -- We test some combinators.
 
-codeTests :: [Test]
+codeTests :: [TestTree]
 codeTests = [
     testCase "@list@ tests"   listTests
   , testCase "@tupled@ tests" tupledTests
@@ -144,7 +143,7 @@ tupledTests = do assertRender 80 "@tupled@ test 1" "(1, True, a)"
 -- We test some corner cases of the formatting algorithms on a prototypical
 -- syntax for a scripting language (e.g. Python).
 
-formatTests :: [Test]
+formatTests :: [TestTree]
 formatTests = [
     testCase "@renderPretty@ test" renderPrettyTest
   , testCase "@renderSmart@ test"  renderSmartTest
@@ -241,7 +240,7 @@ renderSmartTest = do assertSmart 20 "@renderSmart@ test 1" (concat [
 ------------------------------------------------------------
 -- We test the code examples in the haddock comments.
 
-docTests :: [Test]
+docTests :: [TestTree]
 docTests = [
     testCase "@fill@ test" fillTest
   , testCase "@fillBreak@ test" fillBreakTest

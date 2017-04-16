@@ -1,4 +1,4 @@
--- This file has been generated from package.yaml by hpack version 0.15.0.
+-- This file has been generated from package.yaml by hpack version 0.17.0.
 --
 -- see: https://github.com/sol/hpack
 
@@ -53,9 +53,8 @@ test-suite wl-pprint
     text       >= 0.11 && < 1.3,
     deepseq    >= 1.4  && < 1.6,
     wl-pprint-annotated,
-    HUnit,
-    test-framework,
-    test-framework-hunit
+    tasty,
+    tasty-hunit
   if impl(ghc < 8.0)
     build-depends:
       semigroups >= 0.9 && < 1

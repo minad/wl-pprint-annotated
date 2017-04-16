@@ -51,9 +51,8 @@ tests:
     source-dirs: test
     dependencies:
       - wl-pprint-annotated
-      - HUnit
-      - test-framework
-      - test-framework-hunit
+      - tasty
+      - tasty-hunit
     ghc-options:
       - -threaded
       - -rtsopts
