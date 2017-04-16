@@ -30,15 +30,40 @@ conTests = [
   ]
 
 ------------------------------------------------------------
+-- Helper to add annotations
+
+annotateAll :: Doc a -> Doc ()
+annotateAll = Annotate () . go
+  where go Empty          = Empty
+        go (Char x)       = Char x
+        go (Text i s)     = Text i s
+        go Line           = Line
+        go (FlatAlt l r)  = FlatAlt (annotateAll l) (annotateAll r)
+        go (Cat l r)      = Cat (annotateAll l) (annotateAll r)
+        go (Nest i d)     = Nest i (annotateAll d)
+        go (Union l r)    = Union (annotateAll l) (annotateAll r)
+        go (Annotate _ d) = annotateAll d
+        go (Column f)     = Column (annotateAll . f)
+        go (Nesting k)    = Nesting (annotateAll . k)
+        go (Columns k)    = Columns (annotateAll . k)
+        go (Ribbon k)     = Ribbon (annotateAll . k)
+
+------------------------------------------------------------
 -- We test the @Doc@ constructors.
 
 assertPretty :: Int -> String -> String -> Doc a -> Assertion
-assertPretty w desc str doc = assertEqual (desc ++ " (pretty)") str
-                                $ displayS (renderPretty 1.0 w doc) ""
+assertPretty w desc str doc = do
+  assertEqual (desc ++ " (pretty)") str
+    $ displayS (renderPretty 1.0 w doc) ""
+  assertEqual (desc ++ " (pretty, annotated)") str
+    $ displayS (renderPretty 1.0 w $ annotateAll doc) ""
 
 assertSmart :: Int -> String -> String -> Doc a -> Assertion
-assertSmart w desc str doc = assertEqual (desc ++ " (smart)") str
-                                $ displayS (renderSmart w doc) ""
+assertSmart w desc str doc = do
+  assertEqual (desc ++ " (smart)") str
+    $ displayS (renderSmart w doc) ""
+  assertEqual (desc ++ " (smart, annotated)") str
+    $ displayS (renderSmart w $ annotateAll doc) ""
 
 assertRender :: Int -> String -> String -> Doc a -> Assertion
 assertRender w desc str doc = do assertPretty w desc str doc
@@ -63,7 +88,7 @@ flatAltTests = do assertRender 80 "FlatAlt test 1" "x"
                     $ flatten $ flatAlt (text "x") (text "y")
 
 catTests :: Assertion
-catTests = do assertRender 80 "Cat test 1" "some code"
+catTests = assertRender 80 "Cat test 1" "some code"
                 $ text "some" <> space <> text "code"
 
 nestTests :: Assertion
@@ -79,20 +104,20 @@ unionTests = do assertRender 80 "Union test 1" "foo bar"
                   $ text "foo" </> text "bar"
 
 columnTests :: Assertion
-columnTests = do assertRender 80 "Column test 1" "foo 4"
-                   $ text "foo" <+> (column $ \c -> pretty c)
+columnTests = assertRender 80 "Column test 1" "foo 4"
+                 $ text "foo" <+> column pretty
 
 nestingTests :: Assertion
-nestingTests = do assertRender 80 "Nesting test 1" "foo 2"
-                    $ text "foo" <+> (nest 2 $ nesting $ \n -> pretty n)
+nestingTests =  assertRender 80 "Nesting test 1" "foo 2"
+                  $ text "foo" <+> nest 2 (nesting pretty)
 
 columnsTests :: Assertion
-columnsTests = do assertRender 21 "Columns test 1" "foo 21"
-                    $ text "foo" <+> (nest 2 $ columns $ \w -> pretty w)
+columnsTests = assertRender 21 "Columns test 1" "foo 21"
+                  $ text "foo" <+> nest 2 (columns pretty)
 
 ribbonTests :: Assertion
-ribbonTests = do assertEqual "Ribbon test 1" "foo 40"
-                   $ show (text "foo" <+> (ribbon $ \r -> pretty r))
+ribbonTests = assertEqual "Ribbon test 1" "foo 40"
+                 $ show (text "foo" <+> ribbon pretty)
 
 ------------------------------------------------------------
 -- We test some combinators.
@@ -230,7 +255,7 @@ types = [ ("empty","Doc e")
         , ("linebreak","Doc e") ]
 
 fillTest :: Assertion
-fillTest = do assertRender 80 "@fill@ test 1" (concat [
+fillTest = assertRender 80 "@fill@ test 1" (concat [
                   "let empty  :: Doc e\n"
                 , "    nest   :: Int -> Doc e -> Doc e\n"
                 , "    linebreak :: Doc e" ])
@@ -239,7 +264,7 @@ fillTest = do assertRender 80 "@fill@ test 1" (concat [
                       fill 6 (text name) <+> text "::" <+> text tp
 
 fillBreakTest :: Assertion
-fillBreakTest = do assertRender 80 "@fillBreak@ test 1" (concat [
+fillBreakTest = assertRender 80 "@fillBreak@ test 1" (concat [
                        "let empty  :: Doc e\n"
                      , "    nest   :: Int -> Doc e -> Doc e\n"
                      , "    linebreak\n"
@@ -249,7 +274,7 @@ fillBreakTest = do assertRender 80 "@fillBreak@ test 1" (concat [
                         fillBreak 6 (text name) <+> (text "::" <+> text tp)
 
 hangTest :: Assertion
-hangTest = do assertRender 20 "@hang@ test 1" (concat [
+hangTest = assertRender 20 "@hang@ test 1" (concat [
                   "the hang combinator\n"
                 , "    indents these\n"
                 , "    words !" ])
@@ -257,7 +282,7 @@ hangTest = do assertRender 20 "@hang@ test 1" (concat [
                 $ words "the hang combinator indents these words !"
 
 alignTest :: Assertion
-alignTest = do assertRender 20 "@align@ test 1" (concat [
+alignTest = assertRender 20 "@align@ test 1" (concat [
                    "hi nice\n"
                  , "   world" ])
                  $ text "hi" <+> (text "nice" $$ text "world")
