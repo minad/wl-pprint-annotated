@@ -841,6 +841,7 @@ flatten (FlatAlt _ y)   = y
 flatten (Cat x y)       = Cat (flatten x) (flatten y)
 flatten (Nest i x)      = Nest i (flatten x)
 flatten (Union x _)     = flatten x
+flatten (Annotate a x)  = Annotate a (flatten x)
 flatten (Column f)      = Column (flatten . f)
 flatten (Nesting f)     = Nesting (flatten . f)
 flatten (Columns f)     = Columns (flatten . f)
