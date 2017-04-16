@@ -846,7 +846,10 @@ flatten (Column f)      = Column (flatten . f)
 flatten (Nesting f)     = Nesting (flatten . f)
 flatten (Columns f)     = Columns (flatten . f)
 flatten (Ribbon f)      = Ribbon (flatten . f)
-flatten other           = other                     --Empty,Char,Text
+flatten a@Empty{}       = a
+flatten a@Char{}        = a
+flatten a@Text{}        = a
+flatten a@Line{}        = a
 
 -----------------------------------------------------------
 -- Renderers
