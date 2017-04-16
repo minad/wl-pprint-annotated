@@ -934,7 +934,7 @@ renderFits :: (Int -> Int -> Int -> Int -> SimpleDoc a -> SimpleDoc a
                -> SimpleDoc a)
               -> Float -> Int -> Doc a -> SimpleDoc a
 renderFits nicest rfrac w x
-    = best 0 0 SEmpty (Cons 0 x Nil)
+    = best 0 0 (\_ _ -> SEmpty) (Cons 0 x Nil)
     where
       -- r :: the ribbon width in characters
       r  = max 0 (min w (round (fromIntegral w * rfrac)))
@@ -942,7 +942,7 @@ renderFits nicest rfrac w x
       -- best :: n = indentation of current line
       --         k = current column
       --        (ie. (k >= n) && (k - n == count of inserted characters)
-      best _ _ z Nil            = z
+      best n k z Nil           = z n k
       best n k z (Cons i d ds) =
         case d of
           Empty         -> best n k z ds
@@ -952,7 +952,8 @@ renderFits nicest rfrac w x
           FlatAlt l _   -> best n k z (Cons i l ds)
           Cat x' y      -> best n k z (Cons i x' (Cons i y ds))
           Nest j x'     -> let i' = i+j in seq i' (best n k z (Cons i' x' ds))
-          Annotate a d' -> SPushAnn a (best n k (SPopAnn a $ best n k z ds) (Cons i d' Nil))
+          Annotate a d' -> let z' n' k' = SPopAnn a $ best n' k' z ds
+                           in SPushAnn a (best n k z' (Cons i d' Nil))
           Union p q     -> nicest n k w r (best n k z (Cons i p ds))
                                           (best n k z (Cons i q ds))
           Column f      -> best n k z (Cons i (f k) ds)
