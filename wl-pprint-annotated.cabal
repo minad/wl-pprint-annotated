@@ -16,7 +16,7 @@ stability:     experimental
 homepage:      https://github.com/minad/wl-pprint-annotated#readme
 bug-reports:   https://github.com/minad/wl-pprint-annotated/issues
 copyright:     2011-2012 Edward A. Kmett, 2000 Daan Leijen
-description:   Wadler/Leijen pretty printer with annotations and slightly modernized API
+description:   Wadler/Leijen pretty printer with annotations and slightly modernized API.
 build-type:    Simple
 
 source-repository head
