@@ -2,11 +2,11 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 2e9c31835bbabd489ed54b8b7fcd019371a581527ae9af6da7fec79fae45850b
+-- hash: 456188a057c4e34f6769dab99fc89329114f7149df4168c3485402e7a66bb298
 
 name:          wl-pprint-annotated
 category:      Text
-version:       0.1.0.0
+version:       0.1.0.1
 synopsis:      Pretty printer with annotation support
 cabal-version: >= 1.10
 license:       BSD3

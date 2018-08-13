@@ -1,5 +1,5 @@
 name: wl-pprint-annotated
-version: 0.1.0.0
+version: 0.1.0.1
 description: Wadler/Leijen pretty printer with support for annotations and modernized API. Annotations are useful for coloring. See wl-pprint-console.
 synopsis: Pretty printer with annotation support
 category: Text
