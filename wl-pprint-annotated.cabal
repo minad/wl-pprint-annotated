@@ -1,8 +1,8 @@
--- This file has been generated from package.yaml by hpack version 0.27.0.
+-- This file has been generated from package.yaml by hpack version 0.28.2.
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: ef77f96ff4d32ba57cf9e64739e5515a39e5a62a0650940cd5a0a1fc3e3c4af5
+-- hash: 5388eedf7e6663686dcc778d90442d45c3b4578b302808a15468c51642caea55
 
 name:          wl-pprint-annotated
 category:      Text
@@ -11,7 +11,7 @@ synopsis:      Wadler/Leijen pretty printer with annotations and slightly modern
 cabal-version: >= 1.10
 license:       BSD3
 license-file:  LICENSE
-tested-with:   GHC == 7.10.3, GHC == 8.0.1
+tested-with:   GHC == 7.10.3, GHC == 8.0.1, GHC == 8.2.1, GHC == 8.4.3, GHC == 8.6.1
 author:        Daniel Mendler <mail@daniel-mendler.de>
 maintainer:    Daniel Mendler <mail@daniel-mendler.de>
 stability:     experimental
