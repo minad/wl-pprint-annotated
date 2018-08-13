@@ -2,12 +2,12 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 5388eedf7e6663686dcc778d90442d45c3b4578b302808a15468c51642caea55
+-- hash: 2e9c31835bbabd489ed54b8b7fcd019371a581527ae9af6da7fec79fae45850b
 
 name:          wl-pprint-annotated
 category:      Text
 version:       0.1.0.0
-synopsis:      Wadler/Leijen pretty printer with annotations and slightly modernized API
+synopsis:      Pretty printer with annotation support
 cabal-version: >= 1.10
 license:       BSD3
 license-file:  LICENSE
@@ -18,7 +18,7 @@ stability:     experimental
 homepage:      https://github.com/minad/wl-pprint-annotated#readme
 bug-reports:   https://github.com/minad/wl-pprint-annotated/issues
 copyright:     2011-2012 Edward A. Kmett, 2000 Daan Leijen
-description:   Wadler/Leijen pretty printer with annotations and slightly modernized API
+description:   Wadler/Leijen pretty printer with support for annotations and modernized API. Annotations are useful for coloring. See wl-pprint-console.
 build-type:    Simple
 
 source-repository head
